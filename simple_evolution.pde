@@ -1,12 +1,35 @@
-static final int NUMBER_OF_CREATURES = 10;
-static final int NUMBER_OF_MEALS = 500;
+import java.util.Collections;
 
-static final float INITIAL_FOOD_SENSE = 100;
-static final float INTIIAL_ENERGY = 50;
+static final int NUMBER_OF_CREATURES = 5;
+static final int NUMBER_OF_MEALS = 10;
+
+static final float INITIAL_FOOD_SENSE = 200;
+static final float INTIIAL_ENERGY = 150;
+static final int INITIAL_FERTILITY = 5;
+static final float NEW_MEALS_ON_DEATH = 3;
+static final float MEALS_FOR_OFFSPRING = 2;
 
 float calculateMoveCost(Creature c) {
   float cost = (c.movement.speed * 2 + c.body.size*3)/100;
   return cost;
+}
+
+abstract class Evolving<T extends Evolving> {
+
+  T evolve(float probability) {
+    float r = 0.5f - random(1);
+    if (r >= -probability && r < 0) {
+      return evolveNegative();
+    } else if (r >= 0 && r < probability) {
+      return evolvePositive();
+    } else {
+      return evolveNeutral();
+    }
+  }
+
+  abstract T evolvePositive();
+  abstract T evolveNegative();
+  abstract T evolveNeutral();
 }
 
 class Metric {
@@ -38,7 +61,8 @@ class Metric {
     return label +"[" + "MAX: " + max + " MIN:" + min + " AVG:" + getAverage() + "]";
   }
 }
-class Body {
+
+class Body extends Evolving<Body> {
   color intialC;
   color c;
   float size;
@@ -61,7 +85,6 @@ class Body {
     return m.speed * energyFactor;
   }
 
-
   void draw() {
     fill(c);
     ellipse(x, y, size, size);
@@ -71,26 +94,27 @@ class Body {
     return sqrt(pow(x - b.x, 2) + pow(y - b.y, 2));
   }
 
-  Body evolve(float probability) {
-    float r = 0.5f - random(1);
-    if (r >= -probability && r < 0) {
-      return new Body(
-        this.intialC, 
-        size - (random(1) * size/2), 
-        this.x, 
-        this.y
-        );
-    } else if (r >= 0 && r < probability) {
-      return new Body(
-        this.intialC, 
-        size + (random(1) * size/2), 
-        this.x, 
-        this.y
-        );
-    } else {
-      return new Body(
-        this.c, this.size, this.x, this.y);
-    }
+  Body evolvePositive() {
+    return new Body(
+      this.intialC, 
+      size + (random(1) * size/2), 
+      this.x, 
+      this.y
+      );
+  }
+
+  Body evolveNegative() {
+    return new Body(
+      this.intialC, 
+      size - (random(1) * size/2), 
+      this.x, 
+      this.y
+      );
+  }
+
+  Body evolveNeutral() {
+    return new Body(
+      this.c, this.size, this.x, this.y);
   }
 }
 
@@ -116,7 +140,8 @@ class Meal {
     return null;
   }
 }
-class Movement {
+
+class Movement extends Evolving<Movement> {
   float speed;
   float angle;
 
@@ -129,19 +154,18 @@ class Movement {
     return angle * PI/180;
   }
 
-  Movement evolve(float probability) {
-    float r = 0.5f - random(1);
-    if (r >= -probability && r < 0) {
-      return new Movement(
-        this.speed - (random(1) * speed/2), 
-        0);
-    } else if (r >= 0 && r < probability) {
-      return new Movement(
-        this.speed + (random(1) * speed/2), 
-        0);
-    } else {
-      return new Movement(this.speed, 0);
-    }
+  Movement evolvePositive() {
+    return new Movement(
+      this.speed + (random(1) * speed/2), 
+      0);
+  }
+  Movement evolveNegative() {
+    return new Movement(
+      this.speed - (random(1) * speed/2), 
+      0);
+  }
+  Movement evolveNeutral() {
+    return new Movement(this.speed, 0);
   }
 }
 
@@ -161,22 +185,11 @@ class Food {
   }
 }
 
-class FoodSense {
+class FoodSense extends Evolving<FoodSense> {
   float range;
 
   FoodSense(float range) {
     this.range = range;
-  }
-
-  FoodSense evolve(float probability) {
-    float r = 0.5f - random(1);
-    if (r >= -probability && r < 0) {
-      return new FoodSense(range - (random(1) * range/2));
-    } else if (r >= 0 && r < probability) {
-      return new FoodSense(range + (random(1) * range/2));
-    } else {
-      return new FoodSense(range);
-    }
   }
 
   Float sense(Body position, ArrayList<Meal> meals) {
@@ -191,12 +204,57 @@ class FoodSense {
     }
     return null;
   }
+
+  FoodSense evolvePositive() {
+    return new FoodSense(range + (random(1) * range/2));
+  }
+  FoodSense evolveNegative() {
+    return new FoodSense(range - (random(1) * range/2));
+  }
+  FoodSense evolveNeutral() {
+    return new FoodSense(range);
+  }
 }
+class Fertility extends Evolving<Fertility> {
+
+  int maxOffspring;
+  float mealsNeeded;
+  Fertility(int maxOffspring, float mealsNeeded) {
+    this.maxOffspring = maxOffspring;
+    this.mealsNeeded = mealsNeeded;
+  }
+
+  Fertility evolvePositive() {
+    return new Fertility(maxOffspring + 1, mealsNeeded + 0.5f);
+  }
+  Fertility evolveNegative() {
+    return new Fertility(maxOffspring - 1 > 0 ? maxOffspring - 1 : 0, mealsNeeded - 0.5f );
+  }
+  Fertility evolveNeutral() {
+    return new Fertility(maxOffspring, mealsNeeded);
+  }
+
+  int getMealsNeeded() {
+    return round(mealsNeeded);
+  }
+  int getNextOffspringNumber() {
+    float r = randomGaussian();
+    if (r < 0) {
+      return 0;
+    } else if (r > 1) {
+      return 1 * maxOffspring;
+    } else {
+      return (int) round(r * maxOffspring);
+    }
+  }
+}
+
 class Creature {
   Body body;
   Movement movement;
   Food food;
   FoodSense foodSense;
+  Fertility fertility;
   int mealsCollected;
   int lifetime;
   int offspring;
@@ -204,11 +262,13 @@ class Creature {
     Body body, 
     Movement movement, 
     Food food, 
-    FoodSense foodSense) {
+    FoodSense foodSense, 
+    Fertility fertility) {
     this.body = body;
     this.movement = movement;
     this.food = food;
     this.foodSense=foodSense;
+    this.fertility = fertility;
     this.mealsCollected = 0;
     this.lifetime = 0;
     this.offspring=0;
@@ -221,7 +281,7 @@ class Creature {
     float normalizedSpeed = movement.speed/(speedMetric.max - speedMetric.min);
     stroke(255 * normalizedSpeed, 0, 0);
     this.body.draw();
-        stroke(0, 0, 0);
+    stroke(0, 0, 0);
   }
 
   boolean isAlive() {
@@ -286,7 +346,8 @@ class Creature {
       this.body.evolve(probability), 
       this.movement.evolve(probability), 
       new Food(this.food.initialEnergy), 
-      this.foodSense.evolve(probability));
+      this.foodSense.evolve(probability), 
+      this.fertility.evolve(probability));
   }
   void doLive() {
     move();
@@ -320,6 +381,8 @@ void collectMertics() {
   Metric foodSenseMetric = new Metric();
   Metric lifetimeMetric = new Metric();
   Metric offspringMetric = new Metric();
+  Metric fertilityMetric = new Metric();
+
   for (int i =0; i < creatures.size(); i++) {
     speedMetric.put(creatures.get(i).movement.speed);
     sizeMetric.put(creatures.get(i).body.size);
@@ -327,6 +390,7 @@ void collectMertics() {
     foodSenseMetric.put(creatures.get(i).foodSense.range);
     lifetimeMetric.put(creatures.get(i).lifetime);
     offspringMetric.put(creatures.get(i).offspring);
+    fertilityMetric.put(creatures.get(i).fertility.maxOffspring);
   }
   println(
     "Tick: " + (tick++) + 
@@ -336,6 +400,7 @@ void collectMertics() {
     "\n Size: " + sizeMetric.toPrettyString("Size") + 
     "\n Energy: " + energyMetric.toPrettyString("Energy") +
     "\n FoodSense: " + foodSenseMetric.toPrettyString("FoodSense") +
+    "\n Fertility: " + fertilityMetric.toPrettyString("Fertility") +
     "\n Lifetime:" + lifetimeMetric.toPrettyString("Lifetime") + 
     "\n Offspring:" + offspringMetric.toPrettyString("Offspring"));
 }
@@ -347,7 +412,8 @@ void setup() {
       new Body(color(0, 0, 255), 20, 640, 400), 
       new Movement(5, 0 + (90 * (i%4))), 
       new Food(INTIIAL_ENERGY), 
-      new FoodSense(INITIAL_FOOD_SENSE));
+      new FoodSense(INITIAL_FOOD_SENSE), 
+      new Fertility(INITIAL_FERTILITY, MEALS_FOR_OFFSPRING));
     creatures.add(c);
   }
 
@@ -369,15 +435,18 @@ void draw() {
       c.draw();
     } else {
       creaturesToRemove.add(c);
-      for (int z = 0; z < 2; z++) {
+      for (int z = 0; z < NEW_MEALS_ON_DEATH; z++) {
         Meal m = new Meal(
           new Body(color(255, 0, 0), 5, random(1280), random(800)), 
           new Food(c.food.initialEnergy));
         mealsToAdd.add(m);
       }
     }
-    if (c.mealsCollected > 1) {
-      creaturesToAdd.add(c.evolve(0.05f));
+    if (c.mealsCollected > c.fertility.getMealsNeeded() - 1) {
+      int offspring = c.fertility.getNextOffspringNumber();
+      for (int i = 0; i < offspring; i++) {
+        creaturesToAdd.add(c.evolve(0.05f));
+      }
       c.mealsCollected = 0;
       c.offspring++;
     }
@@ -403,8 +472,8 @@ void draw() {
   mealsToAdd.clear();
 
   collectMertics();
-
-  if ( (creatures.size() < 2 && tick > 1000) || tick > 500000) {
+  Collections.shuffle(creatures); 
+  if ( (creatures.size() < 1 && tick > 1000) || tick > 500000) {
     System.exit(0);
   }
 }
